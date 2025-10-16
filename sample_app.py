@@ -1,7 +1,12 @@
 """
-Improved Flask Real-Time Audio Transcription App
+Flask Real-Time Audio Transcription App with Backend Authentication
+Uses your existing /login API at http://127.0.0.1:8000/login
 
-Uses AudioWorklet for better audio capture and WAV conversion.
+Features:
+- Backend authentication via your login API
+- Automatic token refresh every 55 minutes
+- Real-time transcription
+- Improved audio capture
 """
 
 from flask import Flask, render_template_string
@@ -15,7 +20,7 @@ HTML_TEMPLATE = """
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Real-Time Voice Transcription</title>
+    <title>Real-Time Voice Transcription (Authenticated)</title>
     <style>
         * {
             margin: 0;
@@ -38,7 +43,7 @@ HTML_TEMPLATE = """
             border-radius: 20px;
             box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
             padding: 40px;
-            max-width: 800px;
+            max-width: 900px;
             width: 100%;
         }
         
@@ -55,11 +60,95 @@ HTML_TEMPLATE = """
             margin-bottom: 30px;
         }
         
+        /* Auth Section */
+        .auth-section {
+            background: #f0f9ff;
+            border: 2px solid #3b82f6;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .auth-section.authenticated {
+            background: #f0fdf4;
+            border-color: #10b981;
+        }
+        
+        .auth-section.error {
+            background: #fef2f2;
+            border-color: #ef4444;
+        }
+        
+        .auth-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        
+        .auth-status {
+            font-weight: 600;
+            font-size: 14px;
+        }
+        
+        .user-info {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 10px;
+        }
+        
+        .auth-form {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        
+        .auth-form input {
+            flex: 1;
+            min-width: 200px;
+            padding: 10px;
+            border: 2px solid #e5e7eb;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+        
+        .auth-form input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        /* Token Info */
+        .token-info {
+            background: #fffbeb;
+            border: 1px solid #fbbf24;
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 20px;
+            font-size: 13px;
+        }
+        
+        .token-info.hidden {
+            display: none;
+        }
+        
+        .token-status {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 5px;
+        }
+        
+        .refresh-indicator {
+            color: #10b981;
+            font-weight: 600;
+        }
+        
+        /* Controls */
         .controls {
             display: flex;
             gap: 15px;
             justify-content: center;
             margin-bottom: 30px;
+            flex-wrap: wrap;
         }
         
         button {
@@ -78,6 +167,30 @@ HTML_TEMPLATE = """
         button:disabled {
             opacity: 0.5;
             cursor: not-allowed;
+        }
+        
+        .btn-login {
+            background: #3b82f6;
+            color: white;
+        }
+        
+        .btn-login:hover:not(:disabled) {
+            background: #2563eb;
+        }
+        
+        .btn-login.loading {
+            background: #93c5fd;
+        }
+        
+        .btn-logout {
+            background: #ef4444;
+            color: white;
+            padding: 10px 20px;
+            font-size: 14px;
+        }
+        
+        .btn-logout:hover:not(:disabled) {
+            background: #dc2626;
         }
         
         #startBtn {
@@ -221,20 +334,6 @@ HTML_TEMPLATE = """
             margin-top: 5px;
         }
         
-        .recording-indicator {
-            width: 12px;
-            height: 12px;
-            background: #ef4444;
-            border-radius: 50%;
-            display: inline-block;
-            animation: blink 1s ease-in-out infinite;
-        }
-        
-        @keyframes blink {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.3; }
-        }
-        
         .error-message {
             background: #fee2e2;
             color: #991b1b;
@@ -256,15 +355,74 @@ HTML_TEMPLATE = """
             font-size: 11px;
             color: #4b5563;
         }
+        
+        .info-banner {
+            background: #eff6ff;
+            border-left: 4px solid #3b82f6;
+            padding: 12px;
+            margin-bottom: 20px;
+            border-radius: 5px;
+            font-size: 13px;
+            color: #1e40af;
+        }
+
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #3b82f6;
+            border-radius: 50%;
+            width: 16px;
+            height: 16px;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>🎤 Real-Time Voice Transcription</h1>
-        <p class="subtitle">Speak into your microphone and see live transcription</p>
+        <p class="subtitle">Authenticated with Automatic Token Refresh</p>
         
+        <!-- Info Banner -->
+        <div class="info-banner">
+            <strong>🔐 Secure Session:</strong> Your session is authenticated and tokens will automatically refresh every 55 minutes. You can record for hours without interruption!
+        </div>
+        
+        <!-- Authentication Section -->
+        <div id="authSection" class="auth-section">
+            <div class="auth-header">
+                <div class="auth-status" id="authStatus">🔒 Not Authenticated</div>
+                <button id="logoutBtn" class="btn-logout" style="display: none;">Logout</button>
+            </div>
+            <div class="user-info" id="userInfo" style="display: none;"></div>
+            
+            <form id="loginForm" class="auth-form">
+                <input type="email" id="emailInput" placeholder="Email" required>
+                <input type="password" id="passwordInput" placeholder="Password" required>
+                <button type="submit" class="btn-login" id="loginBtn">
+                    <span id="loginBtnText">🔑 Login</span>
+                </button>
+            </form>
+        </div>
+        
+        <!-- Token Info -->
+        <div id="tokenInfo" class="token-info hidden">
+            <div class="token-status">
+                <span>🔄 Auto-refresh: <span class="refresh-indicator" id="refreshStatus">Enabled</span></span>
+                <span id="tokenExpiry">Token expires: --</span>
+            </div>
+            <div id="lastRefresh" style="font-size: 12px; color: #666; margin-top: 5px;">
+                Last refresh: Never
+            </div>
+        </div>
+        
+        <!-- Recording Controls -->
         <div class="controls">
-            <button id="startBtn">
+            <button id="startBtn" disabled>
                 <span>▶️</span> Start Recording
             </button>
             <button id="stopBtn" disabled>
@@ -273,7 +431,7 @@ HTML_TEMPLATE = """
         </div>
         
         <div id="status" class="status idle">
-            Ready to start
+            Please login to start recording
         </div>
         
         <div class="transcription-box" id="transcriptionBox">
@@ -303,30 +461,55 @@ HTML_TEMPLATE = """
         <div id="errorMessage" class="error-message"></div>
         
         <details style="margin-top: 20px;">
-            <summary style="cursor: pointer; color: #667eea; font-weight: 600;">🐛 Debug Log</summary>
+            <summary style="cursor: pointer; color: #667eea; font-weight: 600;">🛠 Debug Log</summary>
             <div id="debugLog" class="debug-log"></div>
         </details>
     </div>
 
     <script>
-        // Configuration
-        const WS_URL = 'wss://ei452m2xjncwby-8000.proxy.runpod.net/stream-transcription';
+        // ============================================================
+        // CONFIGURATION
+        // ============================================================
+        const API_BASE_URL = 'https://ei452m2xjncwby-8000.proxy.runpod.net';
+        const LOGIN_URL = `${API_BASE_URL}/login`;
+        const WS_URL = 'wss://ei452m2xjncwby-8000.proxy.runpod.net/stream-transcription-auth';
         const LANGUAGE = 'en';
         const SAMPLE_RATE = 16000;
-        const CHUNK_DURATION_MS = 500; // Send every 500ms
+        const CHUNK_DURATION_MS = 500;
         
-        // State
+        // ============================================================
+        // STATE
+        // ============================================================
+        let currentUser = null;
+        let idToken = null;
+        let refreshToken = null;
         let audioContext = null;
         let mediaStream = null;
-        let audioWorkletNode = null;
         let websocket = null;
         let isRecording = false;
         let chunksProcessed = 0;
         let chunksSent = 0;
         let recordingStartTime = null;
         let audioBuffer = [];
+        let tokenExpiryTime = null;
+        let durationInterval = null;
         
-        // Elements
+        // ============================================================
+        // DOM ELEMENTS
+        // ============================================================
+        const authSection = document.getElementById('authSection');
+        const authStatus = document.getElementById('authStatus');
+        const userInfo = document.getElementById('userInfo');
+        const loginForm = document.getElementById('loginForm');
+        const emailInput = document.getElementById('emailInput');
+        const passwordInput = document.getElementById('passwordInput');
+        const loginBtn = document.getElementById('loginBtn');
+        const loginBtnText = document.getElementById('loginBtnText');
+        const logoutBtn = document.getElementById('logoutBtn');
+        const tokenInfo = document.getElementById('tokenInfo');
+        const refreshStatus = document.getElementById('refreshStatus');
+        const tokenExpiry = document.getElementById('tokenExpiry');
+        const lastRefresh = document.getElementById('lastRefresh');
         const startBtn = document.getElementById('startBtn');
         const stopBtn = document.getElementById('stopBtn');
         const status = document.getElementById('status');
@@ -336,10 +519,9 @@ HTML_TEMPLATE = """
         const errorMessage = document.getElementById('errorMessage');
         const debugLog = document.getElementById('debugLog');
         
-        // Event listeners
-        startBtn.addEventListener('click', startRecording);
-        stopBtn.addEventListener('click', stopRecording);
-        
+        // ============================================================
+        // UTILITY FUNCTIONS
+        // ============================================================
         function log(message) {
             console.log(message);
             const timestamp = new Date().toLocaleTimeString();
@@ -361,11 +543,205 @@ HTML_TEMPLATE = """
             }, 5000);
         }
         
+        // ============================================================
+        // AUTHENTICATION
+        // ============================================================
+        
+        // Check for stored tokens on page load
+        window.addEventListener('load', () => {
+            const storedIdToken = localStorage.getItem('idToken');
+            const storedRefreshToken = localStorage.getItem('refreshToken');
+            const storedUser = localStorage.getItem('userInfo');
+            
+            if (storedIdToken && storedRefreshToken && storedUser) {
+                idToken = storedIdToken;
+                refreshToken = storedRefreshToken;
+                currentUser = JSON.parse(storedUser);
+                onUserAuthenticated();
+                log('✅ Restored session from localStorage');
+            }
+        });
+        
+        function onUserAuthenticated() {
+            log('✅ User authenticated: ' + currentUser.email);
+            
+            authSection.className = 'auth-section authenticated';
+            authStatus.textContent = '✅ Authenticated';
+            userInfo.innerHTML = `
+                <div><strong>${currentUser.displayName || 'User'}</strong></div>
+                <div>${currentUser.email}</div>
+            `;
+            userInfo.style.display = 'block';
+            loginForm.style.display = 'none';
+            logoutBtn.style.display = 'block';
+            
+            startBtn.disabled = false;
+            updateStatus('Ready to start recording', 'idle');
+            
+            // Show token info
+            tokenInfo.classList.remove('hidden');
+            lastRefresh.textContent = 'Last refresh: Just logged in';
+            
+            // Calculate token expiry
+            if (currentUser.expiresIn) {
+                const expiryDate = new Date(currentUser.expiresIn);
+                tokenExpiry.textContent = `Token expires: ${expiryDate.toLocaleTimeString()}`;
+            }
+        }
+        
+        function onUserLoggedOut() {
+            log('🔓 User logged out');
+            
+            // Clear stored data
+            localStorage.removeItem('idToken');
+            localStorage.removeItem('refreshToken');
+            localStorage.removeItem('userInfo');
+            
+            currentUser = null;
+            idToken = null;
+            refreshToken = null;
+            
+            authSection.className = 'auth-section';
+            authStatus.textContent = '🔒 Not Authenticated';
+            userInfo.style.display = 'none';
+            loginForm.style.display = 'flex';
+            logoutBtn.style.display = 'none';
+            
+            startBtn.disabled = true;
+            stopBtn.disabled = true;
+            updateStatus('Please login to start recording', 'idle');
+            
+            tokenInfo.classList.add('hidden');
+            
+            // Stop recording if active
+            if (isRecording) {
+                stopRecording();
+            }
+        }
+        
+        // Login handler
+        loginForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = emailInput.value;
+            const password = passwordInput.value;
+            
+            try {
+                log('🔐 Attempting login...');
+                loginBtn.disabled = true;
+                loginBtnText.innerHTML = '<div class="spinner"></div> Logging in...';
+                
+                const response = await fetch(LOGIN_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        email: email,
+                        password: password
+                    })
+                });
+                
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || 'Login failed');
+                }
+                
+                const data = await response.json();
+                log('✅ Login successful');
+                log('Response: ' + JSON.stringify(data).substring(0, 100) + '...');
+                
+                // Extract tokens from response
+                // Based on your API response structure:
+                // { "access_token": { "idToken": "...", "refreshToken": "...", ... } }
+                const accessToken = data.access_token;
+                
+                idToken = accessToken.idToken;
+                refreshToken = accessToken.refreshToken;
+                
+                currentUser = {
+                    email: accessToken.email,
+                    displayName: accessToken.displayName,
+                    localId: accessToken.localId,
+                    expiresIn: accessToken.expiresIn
+                };
+                
+                // Store in localStorage
+                localStorage.setItem('idToken', idToken);
+                localStorage.setItem('refreshToken', refreshToken);
+                localStorage.setItem('userInfo', JSON.stringify(currentUser));
+                
+                passwordInput.value = '';
+                onUserAuthenticated();
+                
+            } catch (error) {
+                log('❌ Login failed: ' + error.message);
+                showError('Login failed: ' + error.message);
+            } finally {
+                loginBtn.disabled = false;
+                loginBtnText.textContent = '🔑 Login';
+            }
+        });
+        
+        // Logout handler
+        logoutBtn.addEventListener('click', () => {
+            onUserLoggedOut();
+        });
+        
+        // ============================================================
+        // TOKEN MANAGEMENT
+        // ============================================================
+        function getTokens() {
+            if (!idToken || !refreshToken) {
+                throw new Error('No tokens available. Please login.');
+            }
+            return { idToken, refreshToken };
+        }
+        
+        function updateTokenExpiry(expiresIn) {
+            tokenExpiryTime = new Date(Date.now() + expiresIn * 1000);
+            tokenExpiry.textContent = `Token expires: ${tokenExpiryTime.toLocaleTimeString()}`;
+        }
+        
+        function handleTokenRefresh(data) {
+            log('🔄 Token automatically refreshed by server!');
+            
+            // Update stored tokens
+            idToken = data.id_token;
+            refreshToken = data.refresh_token;
+            
+            localStorage.setItem('idToken', idToken);
+            localStorage.setItem('refreshToken', refreshToken);
+            
+            // Update UI
+            refreshStatus.textContent = 'Active';
+            refreshStatus.style.color = '#10b981';
+            lastRefresh.textContent = `Last refresh: ${new Date().toLocaleTimeString()}`;
+            
+            if (data.expires_in) {
+                updateTokenExpiry(data.expires_in);
+            }
+        }
+        
+        // ============================================================
+        // RECORDING FUNCTIONS
+        // ============================================================
+        startBtn.addEventListener('click', startRecording);
+        stopBtn.addEventListener('click', stopRecording);
+        
         async function startRecording() {
             try {
+                if (!idToken || !refreshToken) {
+                    showError('Please login first');
+                    return;
+                }
+                
                 log('🎤 Requesting microphone access...');
                 
-                // Request microphone access
+                // Get tokens
+                const tokens = getTokens();
+                log('🔑 Using authentication tokens');
+                
+                // Request microphone
                 mediaStream = await navigator.mediaDevices.getUserMedia({ 
                     audio: {
                         channelCount: 1,
@@ -391,15 +767,15 @@ HTML_TEMPLATE = """
                 websocket.onopen = () => {
                     log('✅ WebSocket connected');
                     
-                    // Send config
+                    // Send config with authentication tokens
                     websocket.send(JSON.stringify({
                         type: 'config',
                         language: LANGUAGE,
-                        hospital_id: 'web_app',
-                        user_id: 'web_user'
+                        id_token: tokens.idToken,
+                        refresh_token: tokens.refreshToken  // Enable auto-refresh!
                     }));
                     
-                    log('📤 Sent config message');
+                    log('📤 Sent config with auth tokens (auto-refresh enabled)');
                 };
                 
                 websocket.onmessage = (event) => {
@@ -409,7 +785,7 @@ HTML_TEMPLATE = """
                 
                 websocket.onerror = (error) => {
                     log('❌ WebSocket error: ' + error);
-                    showError('WebSocket connection error. Make sure the server is running on port 8000.');
+                    showError('WebSocket connection error. Make sure the server is running.');
                     stopRecording();
                 };
                 
@@ -417,18 +793,14 @@ HTML_TEMPLATE = """
                     log('🔌 WebSocket disconnected');
                 };
                 
-                // Wait for WebSocket to be ready
+                // Wait for WebSocket ready
                 await new Promise((resolve, reject) => {
                     const timeout = setTimeout(() => reject(new Error('WebSocket timeout')), 5000);
-                    websocket.onopen = () => {
+                    const originalOnOpen = websocket.onopen;
+                    websocket.onopen = (e) => {
+                        originalOnOpen(e);
                         clearTimeout(timeout);
-                        websocket.send(JSON.stringify({
-                            type: 'config',
-                            language: LANGUAGE,
-                            hospital_id: 'web_app',
-                            user_id: 'web_user'
-                        }));
-                        resolve();
+                        setTimeout(resolve, 100);
                     };
                     websocket.onerror = () => {
                         clearTimeout(timeout);
@@ -436,7 +808,7 @@ HTML_TEMPLATE = """
                     };
                 });
                 
-                // Create audio source
+                // Create audio processor
                 const source = audioContext.createMediaStreamSource(mediaStream);
                 const processor = audioContext.createScriptProcessor(4096, 1, 1);
                 
@@ -446,7 +818,6 @@ HTML_TEMPLATE = """
                     const inputData = e.inputBuffer.getChannelData(0);
                     audioBuffer.push(...inputData);
                     
-                    // Check if we have enough data for a chunk (500ms)
                     const samplesNeeded = (CHUNK_DURATION_MS / 1000) * SAMPLE_RATE;
                     
                     if (audioBuffer.length >= samplesNeeded) {
@@ -473,7 +844,7 @@ HTML_TEMPLATE = """
                 log('🎙️ Recording started');
                 
                 // Update duration
-                setInterval(() => {
+                durationInterval = setInterval(() => {
                     if (isRecording) {
                         const duration = Math.floor((Date.now() - recordingStartTime) / 1000);
                         document.getElementById('duration').textContent = duration + 's';
@@ -515,7 +886,7 @@ HTML_TEMPLATE = """
                 chunksSent++;
                 document.getElementById('chunksSent').textContent = chunksSent;
                 
-                log(`📤 Sent chunk #${chunksSent} (${pcmData.length} samples, ${wavBuffer.byteLength} bytes WAV)`);
+                log(`📤 Sent chunk #${chunksSent} (${pcmData.length} samples, ${wavBuffer.byteLength} bytes)`);
                 
             } catch (error) {
                 log('❌ Error sending chunk: ' + error.message);
@@ -524,33 +895,27 @@ HTML_TEMPLATE = """
         
         function createWavFile(pcmData, sampleRate) {
             const numChannels = 1;
-            const bytesPerSample = 2; // 16-bit
+            const bytesPerSample = 2;
             const blockAlign = numChannels * bytesPerSample;
             const byteRate = sampleRate * blockAlign;
             const dataSize = pcmData.length * bytesPerSample;
             const buffer = new ArrayBuffer(44 + dataSize);
             const view = new DataView(buffer);
             
-            // RIFF chunk descriptor
             writeString(view, 0, 'RIFF');
             view.setUint32(4, 36 + dataSize, true);
             writeString(view, 8, 'WAVE');
-            
-            // fmt sub-chunk
             writeString(view, 12, 'fmt ');
-            view.setUint32(16, 16, true); // Subchunk1Size (16 for PCM)
-            view.setUint16(20, 1, true); // AudioFormat (1 for PCM)
+            view.setUint32(16, 16, true);
+            view.setUint16(20, 1, true);
             view.setUint16(22, numChannels, true);
             view.setUint32(24, sampleRate, true);
             view.setUint32(28, byteRate, true);
             view.setUint16(32, blockAlign, true);
-            view.setUint16(34, 16, true); // BitsPerSample
-            
-            // data sub-chunk
+            view.setUint16(34, 16, true);
             writeString(view, 36, 'data');
             view.setUint32(40, dataSize, true);
             
-            // Write PCM samples
             let offset = 44;
             for (let i = 0; i < pcmData.length; i++) {
                 view.setInt16(offset, pcmData[i], true);
@@ -578,6 +943,10 @@ HTML_TEMPLATE = """
         function stopRecording() {
             log('🛑 Stopping recording...');
             
+            if (durationInterval) {
+                clearInterval(durationInterval);
+            }
+            
             if (mediaStream) {
                 mediaStream.getTracks().forEach(track => track.stop());
             }
@@ -598,12 +967,40 @@ HTML_TEMPLATE = """
             updateStatus('⏸️ Processing final transcription...', 'processing');
         }
         
+        // ============================================================
+        // WEBSOCKET MESSAGE HANDLER
+        // ============================================================
         function handleWebSocketMessage(data) {
             log(`📨 Received: ${data.type}` + (data.text ? ` - "${data.text.substring(0, 50)}..."` : ''));
             
             switch (data.type) {
                 case 'ready':
                     log('🟢 Session ready');
+                    if (data.auto_refresh_enabled) {
+                        log('🔄 Auto-refresh is ENABLED - tokens will refresh every 55 minutes');
+                        refreshStatus.textContent = 'Enabled';
+                        refreshStatus.style.color = '#10b981';
+                    } else {
+                        log('⚠️ Auto-refresh is NOT enabled - session will expire in 1 hour');
+                        refreshStatus.textContent = 'Disabled';
+                        refreshStatus.style.color = '#ef4444';
+                    }
+                    break;
+                    
+                case 'token_refreshed':
+                    handleTokenRefresh(data);
+                    break;
+                    
+                case 'token_refresh_failed':
+                    log('❌ Token refresh failed: ' + data.message);
+                    showError('Session expired. Please log in again.');
+                    refreshStatus.textContent = 'Failed';
+                    refreshStatus.style.color = '#ef4444';
+                    // Auto logout after refresh failure
+                    setTimeout(() => {
+                        stopRecording();
+                        onUserLoggedOut();
+                    }, 2000);
                     break;
                     
                 case 'chunk_result':
@@ -628,7 +1025,7 @@ HTML_TEMPLATE = """
                     finalTranscription.style.display = 'block';
                     finalText.textContent = data.text;
                     updateStatus('✅ Transcription complete!', 'idle');
-                    log(`✅ Complete: ${data.total_chunks} chunks processed`);
+                    log(`✅ Complete: ${data.total_chunks} chunks processed in ${data.duration}s`);
                     break;
                     
                 case 'no_speech':
@@ -637,6 +1034,12 @@ HTML_TEMPLATE = """
                     
                 case 'error':
                     showError(data.message);
+                    if (data.message.includes('Authentication') || 
+                        data.message.includes('Token') ||
+                        data.message.includes('authenticated')) {
+                        stopRecording();
+                        setTimeout(() => onUserLoggedOut(), 1000);
+                    }
                     break;
             }
         }
@@ -652,12 +1055,27 @@ def index():
 
 
 if __name__ == '__main__':
-    print("=" * 60)
-    print("🎤 Real-Time Voice Transcription App (Improved)")
-    print("=" * 60)
-    print("Starting Flask server...")
-    print("Open your browser and go to: http://localhost:8000")
-    print("Make sure FastAPI server is running on port 8000!")
-    print("=" * 60)
+    print("=" * 80)
+    print("🎤 Real-Time Voice Transcription App (Authenticated with Auto-Refresh)")
+    print("=" * 80)
+    print("✨ Features:")
+    print("   • Backend authentication via /login API")
+    print("   • Automatic token refresh every 55 minutes")
+    print("   • Unlimited recording sessions")
+    print("   • Real-time transcription")
+    print("=" * 80)
+    print("📋 API Configuration:")
+    print(f"   • Login API: http://127.0.0.1:8000/login")
+    print(f"   • WebSocket: ws://127.0.0.1:8000/stream-transcription-auth")
+    print("=" * 80)
+    print("🚀 How to use:")
+    print("   1. Make sure FastAPI server is running on port 8000")
+    print("   2. Open browser: http://localhost:8000")
+    print("   3. Login with your credentials")
+    print("   4. Start recording - tokens auto-refresh every 55 minutes!")
+    print("=" * 80)
+    print("🌐 Starting Flask server...")
+    print("   Open your browser: http://localhost:8000")
+    print("=" * 80)
     
     app.run(debug=True, host='0.0.0.0', port=8000)
