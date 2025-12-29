@@ -1,0 +1,698 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Audio Upload Widget</title>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-primary: #f8fafc;
+      --bg-secondary: #ffffff;
+      --bg-elevated: #f1f5f9;
+      --border: #e2e8f0;
+      --border-hover: #cbd5e1;
+      --text-primary: #0f172a;
+      --text-secondary: #475569;
+      --text-muted: #94a3b8;
+      --accent: #0891b2;
+      --accent-light: #06b6d4;
+      --accent-bg: rgba(8, 145, 178, 0.08);
+      --success: #059669;
+      --success-bg: rgba(5, 150, 105, 0.08);
+      --error: #dc2626;
+      --error-bg: rgba(220, 38, 38, 0.08);
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'DM Sans', -apple-system, sans-serif;
+      background: var(--bg-primary);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+    }
+
+    .upload-widget {
+      width: 100%;
+      max-width: 480px;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 
+        0 1px 3px rgba(0, 0, 0, 0.04),
+        0 6px 16px rgba(0, 0, 0, 0.06);
+    }
+
+    .widget-header {
+      padding: 1.25rem 1.5rem;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .widget-header svg {
+      width: 20px;
+      height: 20px;
+      color: var(--accent);
+    }
+
+    .widget-header h2 {
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      letter-spacing: -0.01em;
+    }
+
+    .widget-body {
+      padding: 1.5rem;
+    }
+
+    .dropzone {
+      border: 2px dashed var(--border);
+      border-radius: 12px;
+      padding: 2.5rem 1.5rem;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      background: var(--bg-primary);
+    }
+
+    .dropzone:hover,
+    .dropzone.dragover {
+      border-color: var(--accent);
+      background: var(--accent-bg);
+    }
+
+    .dropzone-icon {
+      width: 52px;
+      height: 52px;
+      margin: 0 auto 1rem;
+      background: var(--bg-secondary);
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid var(--border);
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+    }
+
+    .dropzone-icon svg {
+      width: 24px;
+      height: 24px;
+      color: var(--accent);
+    }
+
+    .dropzone-text {
+      font-size: 0.9rem;
+      color: var(--text-primary);
+      margin-bottom: 0.25rem;
+      font-weight: 500;
+    }
+
+    .dropzone-hint {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+
+    .file-input {
+      display: none;
+    }
+
+    /* File Preview */
+    .file-preview {
+      display: none;
+      background: var(--bg-primary);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1rem;
+    }
+
+    .file-preview.visible {
+      display: block;
+    }
+
+    .file-info {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .file-icon {
+      width: 44px;
+      height: 44px;
+      background: var(--bg-secondary);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      border: 1px solid var(--border);
+    }
+
+    .file-icon svg {
+      width: 20px;
+      height: 20px;
+      color: var(--accent);
+    }
+
+    .file-details {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .file-name {
+      font-size: 0.85rem;
+      font-weight: 500;
+      color: var(--text-primary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .file-size {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .file-remove {
+      width: 32px;
+      height: 32px;
+      border: none;
+      background: transparent;
+      color: var(--text-muted);
+      cursor: pointer;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s ease;
+    }
+
+    .file-remove:hover {
+      background: var(--error-bg);
+      color: var(--error);
+    }
+
+    /* Progress */
+    .progress-container {
+      margin-top: 1rem;
+      display: none;
+    }
+
+    .progress-container.visible {
+      display: block;
+    }
+
+    .progress-bar {
+      height: 6px;
+      background: var(--bg-elevated);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent), var(--accent-light));
+      border-radius: 3px;
+      width: 0%;
+      transition: width 0.3s ease;
+    }
+
+    .progress-text {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 0.5rem;
+      font-size: 0.75rem;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .progress-status {
+      color: var(--text-secondary);
+    }
+
+    .progress-percent {
+      color: var(--accent);
+      font-weight: 500;
+    }
+
+    /* Upload Button */
+    .upload-btn {
+      width: 100%;
+      margin-top: 1rem;
+      padding: 0.875rem 1.5rem;
+      background: var(--accent);
+      border: none;
+      border-radius: 10px;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: #ffffff;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: none;
+    }
+
+    .upload-btn.visible {
+      display: block;
+    }
+
+    .upload-btn:hover:not(:disabled) {
+      background: var(--accent-light);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(8, 145, 178, 0.3);
+    }
+
+    .upload-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    /* Status Messages */
+    .status-message {
+      margin-top: 1rem;
+      padding: 0.75rem 1rem;
+      border-radius: 8px;
+      font-size: 0.8rem;
+      display: none;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .status-message.visible {
+      display: flex;
+    }
+
+    .status-message.success {
+      background: var(--success-bg);
+      border: 1px solid rgba(5, 150, 105, 0.15);
+      color: var(--success);
+    }
+
+    .status-message.error {
+      background: var(--error-bg);
+      border: 1px solid rgba(220, 38, 38, 0.15);
+      color: var(--error);
+    }
+
+    .status-message svg {
+      width: 16px;
+      height: 16px;
+      flex-shrink: 0;
+    }
+
+    /* Config Panel */
+    .config-panel {
+      margin-top: 1.5rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid var(--border);
+    }
+
+    .config-title {
+      font-size: 0.7rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 0.75rem;
+    }
+
+    .config-input {
+      width: 100%;
+      padding: 0.75rem 1rem;
+      background: var(--bg-primary);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.8rem;
+      color: var(--text-primary);
+      transition: all 0.15s ease;
+    }
+
+    .config-input:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-bg);
+    }
+
+    .config-input::placeholder {
+      color: var(--text-muted);
+    }
+
+    /* Response Panel */
+    .response-panel {
+      margin-top: 1rem;
+      display: none;
+    }
+
+    .response-panel.visible {
+      display: block;
+    }
+
+    .response-content {
+      background: var(--bg-primary);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+      max-height: 200px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+  </style>
+</head>
+<body>
+  <div class="upload-widget">
+    <div class="widget-header">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/>
+        <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+        <line x1="12" x2="12" y1="19" y2="22"/>
+      </svg>
+      <h2>Audio Upload</h2>
+    </div>
+
+    <div class="widget-body">
+      <!-- Dropzone -->
+      <div class="dropzone" id="dropzone">
+        <div class="dropzone-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="17 8 12 3 7 8"/>
+            <line x1="12" x2="12" y1="3" y2="15"/>
+          </svg>
+        </div>
+        <p class="dropzone-text">Drop audio file or click to browse</p>
+        <p class="dropzone-hint">WAV, MP3, M4A up to 100MB</p>
+        <input type="file" class="file-input" id="fileInput" accept="audio/*">
+      </div>
+
+      <!-- File Preview -->
+      <div class="file-preview" id="filePreview">
+        <div class="file-info">
+          <div class="file-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M9 18V5l12-2v13"/>
+              <circle cx="6" cy="18" r="3"/>
+              <circle cx="18" cy="16" r="3"/>
+            </svg>
+          </div>
+          <div class="file-details">
+            <p class="file-name" id="fileName">audio-recording.wav</p>
+            <p class="file-size" id="fileSize">2.4 MB</p>
+          </div>
+          <button class="file-remove" id="removeFile" title="Remove file">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="18" x2="6" y1="6" y2="18"/>
+              <line x1="6" x2="18" y1="6" y2="18"/>
+            </svg>
+          </button>
+        </div>
+
+        <!-- Progress -->
+        <div class="progress-container" id="progressContainer">
+          <div class="progress-bar">
+            <div class="progress-fill" id="progressFill"></div>
+          </div>
+          <div class="progress-text">
+            <span class="progress-status" id="progressStatus">Uploading...</span>
+            <span class="progress-percent" id="progressPercent">0%</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Upload Button -->
+      <button class="upload-btn" id="uploadBtn">Upload Audio</button>
+
+      <!-- Status Message -->
+      <div class="status-message" id="statusMessage">
+        <svg id="statusIcon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>
+        <span id="statusText"></span>
+      </div>
+
+      <!-- Config -->
+      <div class="config-panel">
+        <p class="config-title">API Endpoint</p>
+        <input 
+          type="text" 
+          class="config-input" 
+          id="apiEndpoint" 
+          placeholder="https://your-api.com/upload-and-store-metadata/"
+          value="http://localhost:8000/upload-and-store-metadata/"
+        >
+      </div>
+
+      <!-- Response Panel -->
+      <div class="response-panel" id="responsePanel">
+        <p class="config-title">API Response</p>
+        <pre class="response-content" id="responseContent"></pre>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    /**
+     * Audio Upload Widget
+     * 
+     * This widget handles the two-step upload process:
+     * 1. Request a signed URL from your backend
+     * 2. Upload the file directly to GCS using the signed URL
+     */
+
+    class AudioUploader {
+      constructor() {
+        this.file = null;
+        this.authToken = null; // Set this to your Firebase auth token
+        
+        // DOM Elements
+        this.dropzone = document.getElementById('dropzone');
+        this.fileInput = document.getElementById('fileInput');
+        this.filePreview = document.getElementById('filePreview');
+        this.fileName = document.getElementById('fileName');
+        this.fileSize = document.getElementById('fileSize');
+        this.removeFile = document.getElementById('removeFile');
+        this.uploadBtn = document.getElementById('uploadBtn');
+        this.progressContainer = document.getElementById('progressContainer');
+        this.progressFill = document.getElementById('progressFill');
+        this.progressStatus = document.getElementById('progressStatus');
+        this.progressPercent = document.getElementById('progressPercent');
+        this.statusMessage = document.getElementById('statusMessage');
+        this.statusIcon = document.getElementById('statusIcon');
+        this.statusText = document.getElementById('statusText');
+        this.apiEndpoint = document.getElementById('apiEndpoint');
+        this.responsePanel = document.getElementById('responsePanel');
+        this.responseContent = document.getElementById('responseContent');
+
+        this.init();
+      }
+
+      init() {
+        // Dropzone events
+        this.dropzone.addEventListener('click', () => this.fileInput.click());
+        this.dropzone.addEventListener('dragover', (e) => this.handleDragOver(e));
+        this.dropzone.addEventListener('dragleave', () => this.dropzone.classList.remove('dragover'));
+        this.dropzone.addEventListener('drop', (e) => this.handleDrop(e));
+        
+        // File input change
+        this.fileInput.addEventListener('change', (e) => this.handleFileSelect(e.target.files[0]));
+        
+        // Remove file
+        this.removeFile.addEventListener('click', () => this.clearFile());
+        
+        // Upload button
+        this.uploadBtn.addEventListener('click', () => this.startUpload());
+      }
+
+      handleDragOver(e) {
+        e.preventDefault();
+        this.dropzone.classList.add('dragover');
+      }
+
+      handleDrop(e) {
+        e.preventDefault();
+        this.dropzone.classList.remove('dragover');
+        const file = e.dataTransfer.files[0];
+        if (file && file.type.startsWith('audio/')) {
+          this.handleFileSelect(file);
+        }
+      }
+
+      handleFileSelect(file) {
+        if (!file) return;
+        
+        this.file = file;
+        this.fileName.textContent = file.name;
+        this.fileSize.textContent = this.formatFileSize(file.size);
+        
+        this.dropzone.style.display = 'none';
+        this.filePreview.classList.add('visible');
+        this.uploadBtn.classList.add('visible');
+        this.hideStatus();
+        this.responsePanel.classList.remove('visible');
+      }
+
+      clearFile() {
+        this.file = null;
+        this.fileInput.value = '';
+        this.dropzone.style.display = 'block';
+        this.filePreview.classList.remove('visible');
+        this.uploadBtn.classList.remove('visible');
+        this.progressContainer.classList.remove('visible');
+        this.hideStatus();
+        this.responsePanel.classList.remove('visible');
+      }
+
+      formatFileSize(bytes) {
+        if (bytes < 1024) return bytes + ' B';
+        if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+        return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+      }
+
+      async startUpload() {
+        if (!this.file) return;
+
+        this.uploadBtn.disabled = true;
+        this.progressContainer.classList.add('visible');
+        this.hideStatus();
+
+        try {
+          // Step 1: Get signed URL from your backend
+          this.updateProgress(0, 'Getting upload URL...');
+          const signedUrlResponse = await this.getSignedUrl();
+          
+          this.showResponse(signedUrlResponse);
+
+          // Step 2: Upload directly to GCS
+          this.updateProgress(10, 'Uploading to storage...');
+          await this.uploadToGCS(signedUrlResponse);
+
+          this.updateProgress(100, 'Complete!');
+          this.showStatus('success', `Upload complete! ID: ${signedUrlResponse.gcs_metadata_id}`);
+
+        } catch (error) {
+          console.error('Upload failed:', error);
+          this.showStatus('error', error.message || 'Upload failed');
+        } finally {
+          this.uploadBtn.disabled = false;
+        }
+      }
+
+      async getSignedUrl() {
+        const endpoint = this.apiEndpoint.value.trim();
+        if (!endpoint) {
+          throw new Error('API endpoint is required');
+        }
+
+        // Build form data (matching AudioRequest model)
+        const formData = new FormData();
+        formData.append('file_name', this.file.name);
+
+        const headers = {};
+        if (this.authToken) {
+          headers['Authorization'] = `Bearer ${this.authToken}`;
+        }
+
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          headers,
+          body: formData
+        });
+
+        if (!response.ok) {
+          const error = await response.json().catch(() => ({}));
+          throw new Error(error.detail || `Server error: ${response.status}`);
+        }
+
+        return response.json();
+      }
+
+      async uploadToGCS(signedUrlData) {
+        const { signed_url, gcs_metadata_id, content_type } = signedUrlData;
+
+        return new Promise((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          
+          xhr.upload.addEventListener('progress', (e) => {
+            if (e.lengthComputable) {
+              const percent = Math.round((e.loaded / e.total) * 90) + 10; // 10-100%
+              this.updateProgress(percent, 'Uploading...');
+            }
+          });
+
+          xhr.addEventListener('load', () => {
+            if (xhr.status >= 200 && xhr.status < 300) {
+              resolve();
+            } else {
+              reject(new Error(`GCS upload failed: ${xhr.status}`));
+            }
+          });
+
+          xhr.addEventListener('error', () => {
+            reject(new Error('Network error during upload'));
+          });
+
+          xhr.open('PUT', signed_url);
+          xhr.setRequestHeader('Content-Type', content_type || 'audio/wav');
+          xhr.setRequestHeader('x-goog-meta-gcs_metadata_id', gcs_metadata_id);
+          xhr.send(this.file);
+        });
+      }
+
+      updateProgress(percent, status) {
+        this.progressFill.style.width = percent + '%';
+        this.progressPercent.textContent = percent + '%';
+        this.progressStatus.textContent = status;
+      }
+
+      showStatus(type, message) {
+        this.statusMessage.className = `status-message visible ${type}`;
+        this.statusText.textContent = message;
+        
+        // Update icon
+        if (type === 'success') {
+          this.statusIcon.innerHTML = '<polyline points="20 6 9 17 4 12"/>';
+        } else {
+          this.statusIcon.innerHTML = '<circle cx="12" cy="12" r="10"/><line x1="15" x2="9" y1="9" y2="15"/><line x1="9" x2="15" y1="9" y2="15"/>';
+        }
+      }
+
+      hideStatus() {
+        this.statusMessage.classList.remove('visible');
+      }
+
+      showResponse(data) {
+        this.responsePanel.classList.add('visible');
+        this.responseContent.textContent = JSON.stringify(data, null, 2);
+      }
+
+      // Call this method to set the auth token
+      setAuthToken(token) {
+        this.authToken = token;
+      }
+    }
+
+    // Initialize the uploader
+    const uploader = new AudioUploader();
+
+    // Example: Set auth token from Firebase
+    // firebase.auth().currentUser.getIdToken().then(token => {
+    //   uploader.setAuthToken(token);
+    // });
+  </script>
+</body>
+</html>
